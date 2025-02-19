@@ -1,0 +1,286 @@
+---
+title: "CSP FINAL_PROJ"
+author: "Vishal Balaji"
+date: "2024-12-13"
+output: html_document
+---
+
+# This study investigates the relationship between **marijuana use, gender, race**, and the levels of **depression** (categorized as "Several" or "Most") using the NHANES dataset. The primary goal is to understand how these variables influence depression risk and identify potential interaction effects.
+
+```{r setup, include=FALSE}
+library(NHANES)
+df<-NHANES
+library(dplyr)
+library(ggplot2)
+NHANES<-NHANES[!duplicated(NHANES$ID),]
+library(table1)
+library(lmtest)
+library(car)
+library(caret)
+library(pROC)
+library(corrplot)
+library(knitr)
+library(RVAideMemoire)
+```
+
+```{r, echo=TRUE}
+# Set seed for reproducibility
+set.seed(123) 
+df_new <- NHANES[sample(nrow(NHANES), 6000), ]
+df_new <-df_new[df_new$Depressed=='Several' | df_new$Depressed=='Most',]
+# Select relevant variables for the study
+variables <- c('ID', 'Age', 'Gender', 'Race1', 'Marijuana', 'Depressed')
+df_new <- df_new[, variables]
+
+df_new$depression_factor <- factor(df_new$Depressed, levels = c("Several", "Most"))
+
+# Data Cleaning
+# Handle missing values
+df_new <- na.omit(df_new)
+# Ensure appropriate data types
+df_new$Gender <- factor(df_new$Gender, levels = c("male", "female"))
+df_new$Race1 <- factor(df_new$Race1)
+df_new$Marijuana <- as.numeric(df_new$Marijuana)
+
+# Descriptive Statistics
+# Table summarizing key variables
+data_summary <- df_new %>%
+  group_by(Gender, Race1) %>%
+  summarise(
+    Mean_Marijuana = mean(Marijuana, na.rm = TRUE),
+    Count_Depressed = table(depression_factor)
+  )
+print(data_summary)
+
+# Chi-squared test for Gender and Depression
+chi_sq_test <- chisq.test(table(df_new$Gender, df_new$depression_factor))
+print(chi_sq_test)
+
+# Chi-squared test for Ethnicity and Depression
+chi_sq_test_ethnicity <- chisq.test(table(df_new$Race1, df_new$depression_factor))
+print(chi_sq_test_ethnicity)
+
+# ANOVA for Marijuana Use across Depression Levels
+anova_model <- aov(Marijuana ~ depression_factor, data = df_new)
+summary(anova_model)
+
+# Post-hoc test for ANOVA
+post_hoc <- TukeyHSD(anova_model)
+print(post_hoc)
+
+# Residuals to find the direction of association
+anova_residuals <- resid(anova_model)
+ggplot(df_new, aes(x = depression_factor, y = anova_residuals)) +
+  geom_boxplot(fill = "red", color = "black") +
+  labs(title = "Residuals from ANOVA", x = "Depression Levels", y = "Residuals") +
+  theme_minimal()
+
+# Relative Risk/Odds Ratio Estimation
+# Creating binary depression outcome (Several vs Most)
+df_new$Depression_Binary <- ifelse(df_new$depression_factor == "Most", 1, 0)
+
+# Logistic Regression for Odds Ratio
+logistic_model <- glm(Depression_Binary ~ Marijuana + Gender + Race1, data = df_new, family = binomial)
+summary(logistic_model)
+
+# Calculate Odds Ratios
+odds_ratios <- exp(coef(logistic_model))
+print(odds_ratios)
+
+# Visualization of Odds Ratios
+library(ggplot2)
+odds_ratios_df <- data.frame(
+  Variable = names(odds_ratios),
+  OddsRatio = odds_ratios
+)
+
+ggplot(odds_ratios_df[-1,], aes(x = Variable, y = OddsRatio)) +
+  geom_bar(stat = "identity", fill = "grey") +
+  labs(title = "Odds Ratios for Depression (Most vs Several)", x = "Variable", y = "Odds Ratio") +
+  theme_minimal()
+
+# Interaction Effects
+interaction_model <- glm(Depression_Binary ~ Marijuana * Gender, data = df_new, family = binomial)
+summary(interaction_model)
+
+```
+
+
+
+# <u><b>FINAL REPORT :</b></u>
+
+# **Introduction**
+
+This study investigates the relationship between **marijuana use, gender, race**, and the levels of **depression** (categorized as "Several" or "Most") using the NHANES dataset. The primary goal is to understand how these variables influence depression risk and identify potential interaction effects.
+
+---
+
+# **Data Gathering**
+
+The dataset was sampled from **NHANES**, with 6,000 random observations. The study focused on participants who reported feeling depressed at the "Several" or "Most" level. The relevant variables selected for the analysis are:
+
+- **ID**: Unique identifier for each participant  
+- **Age**  
+- **Gender**: Categorized as male or female  
+- **Race1**: Categories include Black, Hispanic, Mexican, White, and Other  
+- **Marijuana**: Numeric value indicating marijuana use  
+- **Depressed**: Levels of depression ("Several" or "Most")  
+
+A derived factor, **depression_factor**, was created to categorize depression levels.
+
+---
+
+# **Methods for Analysis**
+
+### **Data Cleaning**
+
+- Removed rows with missing values using `na.omit()`.  
+- Converted **Gender** and **Race1** to factors, and **Marijuana** to a numeric type.
+
+### **Descriptive Statistics**
+
+- Grouped data by **Gender** and **Race1** to calculate the **mean marijuana use** and **count of depression levels**.
+
+### **Chi-Square Tests**
+
+- Tested the association between **Gender** and depression levels.  
+- Tested the association between **Race1** and depression levels.
+
+### **ANOVA**
+
+- Analyzed differences in marijuana use across depression levels.  
+- Conducted a **post-hoc Tukey HSD test** to determine specific group differences.
+
+### **Logistic Regression**
+
+- Modeled depression (binary outcome) based on **marijuana use, gender, and race**.  
+- Calculated **odds ratios** to assess the risk factors.  
+- Tested **interaction effects** between marijuana use and gender.
+
+---
+
+# **Analysis of Data**
+
+## **Descriptive Statistics**
+
+- Mean marijuana use was summarized for each combination of **Gender** and **Race1**.  
+- The depression counts by group were also tabulated.
+
+---
+
+## **Chi-Square Tests**
+
+### **Gender and Depression**
+
+- **p-value = 0.3971** (Not significant)  
+  No significant association between gender and depression levels.
+
+### **Race and Depression**
+
+- **p-value = 0.0962** (Not significant at 0.05 level)  
+  No significant association between race and depression levels.
+
+---
+
+## **ANOVA for Marijuana Use**
+
+- **p-value = 0.423** (Not significant)  
+  No significant difference in marijuana use between participants reporting "Several" and "Most" depression levels.
+
+### **Post-Hoc Test**
+
+- No significant pairwise differences in marijuana use between the depression groups.
+
+---
+
+## **Logistic Regression**
+
+### **Model Predictors**
+
+- **Marijuana**: Estimate = -0.1502, p-value = 0.4289 (Not significant)  
+- **Gender (female)**: Estimate = 0.1268, p-value = 0.4795 (Not significant)  
+- **Race1 (Mexican)**: Estimate = -0.7180, p-value = 0.0305 (Significant)  
+
+### **Odds Ratios**
+
+- **Marijuana**: 0.86 (Not significant)  
+- **Gender (female)**: 1.14 (Not significant)  
+- **Race (Mexican)**: 0.49 (Significant) – Lower odds of reporting "Most" depression compared to the baseline group.
+
+---
+
+## **Interaction Effects**
+
+- **Marijuana × Gender Interaction**:  
+  **p-value = 0.1607** (Not significant)  
+  The interaction between marijuana use and gender did not significantly affect depression levels.
+
+---
+
+# **Conclusion**
+
+### **Key Findings**
+
+1. **No significant associations** were found between **Gender** or **Race** and depression levels based on the Chi-Square tests.  
+2. **Marijuana use** did not significantly differ across depression levels based on the ANOVA results.  
+3. **Logistic regression** showed that **Mexican participants** had significantly lower odds of reporting "Most" depression compared to other racial groups.  
+4. The interaction between **marijuana use and gender** was not statistically significant.
+
+### **Summary**
+
+The study did not find strong evidence linking marijuana use or gender to higher depression levels. However, race (specifically identifying as Mexican) showed a protective effect against severe depression.
+
+---
+
+# **Future Scope**
+
+### **Larger Sample Size**
+
+- Increase the dataset size to enhance statistical power and detect subtle effects.
+
+### **Additional Variables**
+
+- Include other mental health factors, socioeconomic status, education levels, and substance use patterns.
+
+### **Longitudinal Analysis**
+
+- Conduct a longitudinal study to observe changes in depression over time and how marijuana use influences these changes.
+
+### **Mental Health Interventions**
+
+- Explore how mental health services or interventions impact depression levels across different demographics.
+
+### **Machine Learning Models**
+
+- Use advanced models to capture non-linear relationships and interactions more effectively.
+
+### **Psychosocial Factors**
+
+- Investigate the impact of social support, stress, and life events on depression risk.
+
+### **Interaction Studies**
+
+- Examine interactions between marijuana use, gender, race, and other lifestyle factors (e.g., physical activity, diet).
+
+This expanded scope can provide a more comprehensive understanding of the factors influencing depression.
+
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
